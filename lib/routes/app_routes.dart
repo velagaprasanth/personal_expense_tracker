@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../screens/splash/splash_screen.dart';
 import '../screens/onboarding/onboarding_screen.dart';
 import '../screens/auth/login_screen.dart';
@@ -16,55 +19,103 @@ import '../widgets/bottom_nav_bar.dart';
 import '../models/transaction.dart' as app_models;
 import '../providers/transaction_provider.dart';
 
-final GoRouter appRouter = GoRouter(
-  initialLocation: '/',
-  routes: [
-    GoRoute(path: '/', builder: (context, state) => const SplashScreen()),
-    GoRoute(
-      path: '/onboarding',
-      builder: (context, state) => const OnboardingScreen(),
-    ),
-    GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-    GoRoute(
-      path: '/register',
-      builder: (context, state) => const RegisterScreen(),
-    ),
-    ShellRoute(
-      builder: (context, state, child) {
-        return BottomNavBar(child: child);
-      },
-      routes: [
-        GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
-        GoRoute(
-          path: '/statistics',
-          builder: (context, state) => const StaticScreen(),
+class GoRouterRefreshStream extends ChangeNotifier {
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    _subscription = stream.asBroadcastStream().listen((_) => notifyListeners());
+  }
+
+  late final StreamSubscription<dynamic> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
+
+late final GoRouter appRouter = _createRouter();
+
+GoRouter _createRouter() {
+  final authStream = Supabase.instance.client.auth.onAuthStateChange;
+  return GoRouter(
+    initialLocation: '/',
+    refreshListenable: GoRouterRefreshStream(authStream),
+    redirect: (context, state) {
+      final session = Supabase.instance.client.auth.currentSession;
+      final location = state.matchedLocation;
+      final isSplash = location == '/';
+      final isPublicRoute =
+          location == '/login' ||
+          location == '/register' ||
+          location == '/onboarding';
+
+      if (isSplash) {
+        return null;
+      }
+
+      if (session == null) {
+        return isPublicRoute ? null : '/login';
+      }
+
+      if (session != null && isPublicRoute) {
+        return '/home';
+      }
+
+      return null;
+    },
+    routes: [
+      GoRoute(path: '/', builder: (context, state) => const SplashScreen()),
+      GoRoute(
+        path: '/onboarding',
+        builder: (context, state) => const OnboardingScreen(),
+      ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      ShellRoute(
+        builder: (context, state, child) {
+          return BottomNavBar(child: child);
+        },
+        routes: [
+          GoRoute(
+            path: '/home',
+            builder: (context, state) => const HomeScreen(),
+          ),
+          GoRoute(
+            path: '/statistics',
+            builder: (context, state) => const StaticScreen(),
+          ),
+          GoRoute(
+            path: '/wallet',
+            builder: (context, state) => const WalletShell(),
+          ),
+          GoRoute(
+            path: '/profile',
+            builder: (context, state) => const ProfileScreen(),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/add-expense',
+        builder: (context, state) => AddExpenseScreen(
+          transaction: state.extra as app_models.Transaction?,
         ),
-        GoRoute(
-          path: '/wallet',
-          builder: (context, state) => const WalletShell(),
+      ),
+      GoRoute(
+        path: '/add-income',
+        builder: (context, state) => AddIncomeScreen(
+          transaction: state.extra as app_models.Transaction?,
         ),
-        GoRoute(
-          path: '/profile',
-          builder: (context, state) => const ProfileScreen(),
-        ),
-      ],
-    ),
-    GoRoute(
-      path: '/add-expense',
-      builder: (context, state) =>
-          AddExpenseScreen(transaction: state.extra as app_models.Transaction?),
-    ),
-    GoRoute(
-      path: '/add-income',
-      builder: (context, state) =>
-          AddIncomeScreen(transaction: state.extra as app_models.Transaction?),
-    ),
-    GoRoute(
-      path: '/edit-profile',
-      builder: (context, state) => const EditProfileScreen(),
-    ),
-  ],
-);
+      ),
+      GoRoute(
+        path: '/edit-profile',
+        builder: (context, state) => const EditProfileScreen(),
+      ),
+    ],
+  );
+}
 
 class WalletShell extends ConsumerWidget {
   const WalletShell({Key? key}) : super(key: key);

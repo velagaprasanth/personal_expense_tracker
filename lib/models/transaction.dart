@@ -1,4 +1,10 @@
+import 'package:json_annotation/json_annotation.dart';
+
+part 'transaction.g.dart';
+
+@JsonSerializable(fieldRename: FieldRename.snake, includeIfNull: false)
 class Transaction {
+  @JsonKey(includeIfNull: false)
   final String? id;
   final String userId;
   final String type; // 'income' or 'expense'
@@ -19,34 +25,10 @@ class Transaction {
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  Map<String, dynamic> toJson() {
-    final json = <String, dynamic>{
-      'user_id': userId,
-      'type': type,
-      'amount': amount,
-      'category': category,
-      'description': description,
-      'date': date.toIso8601String(),
-      'created_at': createdAt.toIso8601String(),
-    };
-    if (id != null) {
-      json['id'] = id!;
-    }
-    return json;
-  }
+  factory Transaction.fromJson(Map<String, dynamic> json) =>
+      _$TransactionFromJson(json);
 
-  factory Transaction.fromJson(Map<String, dynamic> json) {
-    return Transaction(
-      id: json['id']?.toString(),
-      userId: json['user_id'] as String,
-      type: json['type'] as String,
-      amount: (json['amount'] as num).toDouble(),
-      category: json['category'] as String,
-      description: json['description'] as String,
-      date: DateTime.parse(json['date'] as String),
-      createdAt: DateTime.parse(json['created_at'] as String),
-    );
-  }
+  Map<String, dynamic> toJson() => _$TransactionToJson(this);
 
   Transaction copyWith({
     String? id,

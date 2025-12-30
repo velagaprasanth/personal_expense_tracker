@@ -20,7 +20,7 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
   final _amountController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   String? _selectedCategory;
-  DateTime _selectedDate = DateTime.now();
+  DateTime? _selectedDate;
   bool _isLoading = false;
 
   final List<String> _categories = [
@@ -52,23 +52,7 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
   }
 
   Future<void> _handleAddIncome() async {
-    if (_amountController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter an amount'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a category'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
@@ -91,22 +75,16 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
 
     try {
       final isEditing = widget.transaction != null;
+      final amount = _extractAmountFrom(_amountController.text)!;
 
       final transaction = Transaction(
         id: widget.transaction?.id,
         userId: userId,
         type: 'income',
-        amount: double.parse(
-          _amountController.text
-              .replaceAll('\$', '')
-              .replaceAll('₹', '')
-              .trim(),
-        ),
+        amount: amount,
         category: _selectedCategory!,
-        description: _nameController.text.isEmpty
-            ? _selectedCategory!
-            : _nameController.text,
-        date: _selectedDate,
+        description: _nameController.text.trim(),
+        date: _selectedDate!,
         createdAt: widget.transaction?.createdAt ?? DateTime.now(),
       );
 
@@ -151,7 +129,7 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
     }
   }
 
-  void _showCategoryPicker() {
+  void _showCategoryPicker([FormFieldState<String>? fieldState]) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -197,6 +175,7 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
                       setState(() {
                         _selectedCategory = category;
                       });
+                      fieldState?.didChange(category);
                       Navigator.pop(context);
                     },
                   );
@@ -296,6 +275,12 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
                           const SizedBox(height: 8),
                           TextFormField(
                             controller: _nameController,
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Please enter a title';
+                              }
+                              return null;
+                            },
                             decoration: InputDecoration(
                               hintText: '',
                               filled: true,
@@ -340,6 +325,13 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
+                            validator: (value) {
+                              final amount = _extractAmountFrom(value ?? '');
+                              if (amount == null || amount <= 0) {
+                                return 'Enter a valid amount';
+                              }
+                              return null;
+                            },
                             decoration: InputDecoration(
                               hintText: '\$ 0.00',
                               hintStyle: TextStyle(color: Colors.grey.shade400),
@@ -389,116 +381,147 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
                             },
                           ),
                           const SizedBox(height: 24),
-                          Text(
-                            'DATE',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          GestureDetector(
-                            onTap: () async {
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: _selectedDate,
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime.now(),
-                                builder: (context, child) {
-                                  return Theme(
-                                    data: Theme.of(context).copyWith(
-                                      colorScheme: const ColorScheme.light(
-                                        primary: Color(0xFF2F7F78),
+                          FormField<DateTime>(
+                            initialValue: _selectedDate,
+                            validator: (_) => _selectedDate == null
+                                ? 'Please select a date'
+                                : null,
+                            builder: (state) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'DATE',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                GestureDetector(
+                                  onTap: () => _selectDate(state),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 16,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade50,
+                                      border: Border.all(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          _selectedDate != null
+                                              ? DateFormat(
+                                                  'EEE, dd MMM yyyy',
+                                                ).format(_selectedDate!)
+                                              : 'Select a date',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            color: _selectedDate != null
+                                                ? Colors.black87
+                                                : Colors.grey.shade600,
+                                          ),
+                                        ),
+                                        Icon(
+                                          Icons.calendar_today,
+                                          size: 20,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                if (state.hasError)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      state.errorText!,
+                                      style: const TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 12,
                                       ),
                                     ),
-                                    child: child!,
-                                  );
-                                },
-                              );
-                              if (date != null) {
-                                setState(() {
-                                  _selectedDate = date;
-                                });
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                border: Border.all(color: Colors.grey.shade300),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    DateFormat(
-                                      'EEE, dd MMM yyyy',
-                                    ).format(_selectedDate),
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      color: Colors.black87,
-                                    ),
                                   ),
-                                  Icon(
-                                    Icons.calendar_today,
-                                    size: 20,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ],
-                              ),
+                              ],
                             ),
                           ),
                           const SizedBox(height: 24),
-                          Text(
-                            'Category',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          GestureDetector(
-                            onTap: _showCategoryPicker,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                border: Border.all(color: Colors.grey.shade300),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.add_circle_outline,
+                          FormField<String>(
+                            initialValue: _selectedCategory,
+                            validator: (_) => _selectedCategory == null
+                                ? 'Please select a category'
+                                : null,
+                            builder: (state) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'CATEGORY',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
                                     color: Colors.grey.shade600,
-                                    size: 20,
+                                    letterSpacing: 0.5,
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _selectedCategory ?? 'Add Category',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      color: _selectedCategory != null
-                                          ? Colors.black87
-                                          : Colors.grey.shade600,
-                                      fontWeight: FontWeight.w500,
+                                ),
+                                const SizedBox(height: 8),
+                                GestureDetector(
+                                  onTap: () => _showCategoryPicker(state),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 16,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade50,
+                                      border: Border.all(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.add_circle_outline,
+                                          color: Colors.grey.shade600,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          _selectedCategory ?? 'Add Category',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            color: _selectedCategory != null
+                                                ? Colors.black87
+                                                : Colors.grey.shade600,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ],
-                              ),
+                                ),
+                                if (state.hasError)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      state.errorText!,
+                                      style: const TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                           const SizedBox(height: 32),
@@ -545,5 +568,36 @@ class _AddIncomeScreenState extends ConsumerState<AddIncomeScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _selectDate(FormFieldState<DateTime> fieldState) async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: Color(0xFF2F7F78)),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (date != null) {
+      setState(() {
+        _selectedDate = date;
+      });
+      fieldState.didChange(date);
+    }
+  }
+
+  double? _extractAmountFrom(String value) {
+    final sanitized = value.replaceAll(RegExp(r'[^0-9.]'), '').trim();
+    if (sanitized.isEmpty) {
+      return null;
+    }
+    return double.tryParse(sanitized);
   }
 }

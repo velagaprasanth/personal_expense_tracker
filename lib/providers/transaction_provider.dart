@@ -1,78 +1,62 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../models/transaction.dart';
 import '../services/transaction_service.dart';
 
-// Service provider
-final transactionServiceProvider = Provider<TransactionService>((ref) {
+part 'transaction_provider.g.dart';
+
+@Riverpod(keepAlive: true)
+TransactionService transactionService(TransactionServiceRef ref) {
   return TransactionService();
-});
+}
 
-// Transactions list provider
-final transactionsProvider =
-    StateNotifierProvider<TransactionsNotifier, AsyncValue<List<Transaction>>>(
-  (ref) => TransactionsNotifier(ref.read(transactionServiceProvider)),
-);
+@Riverpod(keepAlive: true)
+class Transactions extends _$Transactions {
+  TransactionService get _service => ref.watch(transactionServiceProvider);
 
-class TransactionsNotifier
-    extends StateNotifier<AsyncValue<List<Transaction>>> {
-  final TransactionService _service;
-
-  TransactionsNotifier(this._service) : super(const AsyncValue.loading()) {
-    loadTransactions();
-  }
-
-  Future<void> loadTransactions() async {
-    state = const AsyncValue.loading();
-    try {
-      final transactions = await _service.getTransactions();
-      state = AsyncValue.data(transactions);
-    } catch (e, stack) {
-      state = AsyncValue.error(e, stack);
-    }
+  @override
+  Future<List<Transaction>> build() async {
+    return _service.getTransactions();
   }
 
   Future<void> addTransaction(Transaction transaction) async {
-    try {
-      await _service.addTransaction(transaction);
-      await loadTransactions();
-    } catch (e) {
-      rethrow;
-    }
+    await _service.addTransaction(transaction);
+    ref.invalidateSelf();
+    _invalidateSummaries();
   }
 
   Future<void> updateTransaction(Transaction transaction) async {
-    try {
-      await _service.updateTransaction(transaction);
-      await loadTransactions();
-    } catch (e) {
-      rethrow;
-    }
+    await _service.updateTransaction(transaction);
+    ref.invalidateSelf();
+    _invalidateSummaries();
   }
 
   Future<void> deleteTransaction(String id) async {
-    try {
-      await _service.deleteTransaction(id);
-      await loadTransactions();
-    } catch (e) {
-      rethrow;
-    }
+    await _service.deleteTransaction(id);
+    ref.invalidateSelf();
+    _invalidateSummaries();
+  }
+
+  void _invalidateSummaries() {
+    ref.invalidate(balanceProvider);
+    ref.invalidate(totalIncomeProvider);
+    ref.invalidate(totalExpensesProvider);
   }
 }
 
-// Balance provider
-final balanceProvider = FutureProvider<double>((ref) async {
-  final service = ref.read(transactionServiceProvider);
-  return await service.getBalance();
-});
+@Riverpod(keepAlive: true)
+Future<double> balance(BalanceRef ref) async {
+  final service = ref.watch(transactionServiceProvider);
+  return service.getBalance();
+}
 
-// Total income provider
-final totalIncomeProvider = FutureProvider<double>((ref) async {
-  final service = ref.read(transactionServiceProvider);
-  return await service.getTotalIncome();
-});
+@Riverpod(keepAlive: true)
+Future<double> totalIncome(TotalIncomeRef ref) async {
+  final service = ref.watch(transactionServiceProvider);
+  return service.getTotalIncome();
+}
 
-// Total expenses provider
-final totalExpensesProvider = FutureProvider<double>((ref) async {
-  final service = ref.read(transactionServiceProvider);
-  return await service.getTotalExpenses();
-});
+@Riverpod(keepAlive: true)
+Future<double> totalExpenses(TotalExpensesRef ref) async {
+  final service = ref.watch(transactionServiceProvider);
+  return service.getTotalExpenses();
+}
