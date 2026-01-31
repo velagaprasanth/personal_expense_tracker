@@ -37,7 +37,7 @@ class HomeScreen extends ConsumerWidget {
             child: Column(
               children: [
                 /// 🔹 HEADER
-                Padding(
+                Padding(       
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

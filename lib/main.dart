@@ -12,6 +12,7 @@ void main() async {
     anonKey: SupabaseConfig.supabaseAnonKey,
   );
 
+  
   runApp(const ProviderScope(child: MyApp()));
 }
 
